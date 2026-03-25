@@ -70,8 +70,8 @@ def main(args):
             eh_enable = params.get("eh_enable", False)
             eh_state_key = params.get("eh_state_key", 99431)
             eh_sched_key = params.get("eh_sched_key", 137631)
-            eh_candidate_width = params.get("eh_candidate_width", 4)
-            eh_min_credit = params.get("eh_min_credit", 0.35)
+            eh_candidate_width = params.get("eh_candidate_width", 8)
+            eh_min_credit = params.get("eh_min_credit", 0.25)
             eh_allow_skip = params.get("eh_allow_skip", False)
             vocab_size = params["vocab_size"]
             gamma = 0.5

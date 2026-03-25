@@ -24,8 +24,8 @@ class WatermarkBimark(LogitsProcessor):
         eh_enable: bool = False,
         eh_state_key: int = 99431,
         eh_sched_key: int = 137631,
-        eh_candidate_width: int = 4,
-        eh_min_credit: float = 0.35,
+        eh_candidate_width: int = 8,
+        eh_min_credit: float = 0.25,
         eh_allow_skip: bool = False,
         max_new_tokens: int = 256
     ):  

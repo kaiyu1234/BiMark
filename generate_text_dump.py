@@ -222,7 +222,7 @@ if __name__ == "__main__":
     parser.add_argument("--eh_enable", action='store_true', help="enable E+H (budget optimization + state-machine bit scheduling)")
     parser.add_argument("--eh_state_key", type=int, default=99431, help="state-machine key for E+H")
     parser.add_argument("--eh_sched_key", type=int, default=137631, help="budget scheduling key for E+H")
-    parser.add_argument("--eh_candidate_width", type=int, default=4, help="candidate width for state-machine bit selection")
+    parser.add_argument("--eh_candidate_width", type=int, default=8, help="candidate width for state-machine bit selection")
     parser.add_argument("--eh_min_credit", type=float, default=0.25, help="minimum budget credit for applying watermark at a step")
     parser.add_argument("--eh_allow_skip", action='store_true', help="allow budget gating to skip embedding; default is fallback to baseline embedding")
     

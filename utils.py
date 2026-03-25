@@ -210,8 +210,14 @@ def eh_select_bit(prefix: torch.LongTensor, state: int, bit_counts: list, bits_l
     new_state = (a * state + b) % bits_len
 
     width = max(1, min(candidate_width, bits_len))
-    candidates = [int((new_state + i) % bits_len) for i in range(width)]
-    selected = min(candidates, key=lambda idx: bit_counts[idx])
+    # global rebalancing: prioritize the least-covered bits first (better for short-text payloads)
+    jitter_seed = prf(prefix, sched_key)
+    ranked = sorted(
+        list(range(bits_len)),
+        key=lambda idx: (bit_counts[idx], (jitter_seed ^ (idx * 2654435761)) & 0xFFFFFFFF)
+    )
+    candidates = ranked[:width]
+    selected = candidates[jitter_seed % len(candidates)]
 
     credit_seed = prf(prefix, sched_key)
     credit = (credit_seed % 10000) / 10000.0
