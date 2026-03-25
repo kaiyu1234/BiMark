@@ -26,6 +26,7 @@ class WatermarkBimark(LogitsProcessor):
         eh_sched_key: int = 137631,
         eh_candidate_width: int = 4,
         eh_min_credit: float = 0.35,
+        eh_allow_skip: bool = False,
         max_new_tokens: int = 256
     ):  
         
@@ -57,6 +58,7 @@ class WatermarkBimark(LogitsProcessor):
         self.eh_sched_key = eh_sched_key
         self.eh_candidate_width = eh_candidate_width
         self.eh_min_credit = eh_min_credit
+        self.eh_allow_skip = eh_allow_skip
         self.max_new_tokens = max_new_tokens
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
@@ -124,6 +126,11 @@ class WatermarkBimark(LogitsProcessor):
                     total_steps=self.max_new_tokens,
                     min_credit=self.eh_min_credit
                 )
+                if (not should_embed) and (not self.eh_allow_skip):
+                    # fallback to baseline random bit index to preserve capacity
+                    rng_bit_idx = np.random.default_rng(bit_idx_seed[i])
+                    bit_idx = rng_bit_idx.integers(0, len(self.bits))
+                    should_embed = True
             else:
                 rng_bit_idx = np.random.default_rng(bit_idx_seed[i])
                 bit_idx = rng_bit_idx.integers(0, len(self.bits))

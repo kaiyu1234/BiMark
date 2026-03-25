@@ -119,6 +119,7 @@ def main(args):
                                                          c_key=args.c_key, bit_idx_key=args.bit_idx_key, delta=args.prob_delta, window_size=args.window_size, bits=bits,
                                                          eh_enable=args.eh_enable, eh_state_key=args.eh_state_key, eh_sched_key=args.eh_sched_key,
                                                          eh_candidate_width=args.eh_candidate_width, eh_min_credit=args.eh_min_credit,
+                                                         eh_allow_skip=args.eh_allow_skip,
                                                          max_new_tokens=args.max_new_tokens)
             generate_args_bimark = {'logits_processor': [watermark_processor_bimark],  'max_new_tokens': args.max_new_tokens,'temperature': args.temperature,  'attention_mask': attention_mask, 
                                   'do_sample': args.do_sample, 'top_k': args.top_k}
@@ -176,6 +177,7 @@ def main(args):
                 "eh_sched_key": args.eh_sched_key,
                 "eh_candidate_width": args.eh_candidate_width,
                 "eh_min_credit": args.eh_min_credit,
+                "eh_allow_skip": args.eh_allow_skip,
                 "time_stamp": time_str,
             }
             record_data(batch_prompts, tokenizer, new_token[:,prompt_tokens_len:].tolist(), idx_list, save_dir, params, bits=bits)
@@ -221,7 +223,8 @@ if __name__ == "__main__":
     parser.add_argument("--eh_state_key", type=int, default=99431, help="state-machine key for E+H")
     parser.add_argument("--eh_sched_key", type=int, default=137631, help="budget scheduling key for E+H")
     parser.add_argument("--eh_candidate_width", type=int, default=4, help="candidate width for state-machine bit selection")
-    parser.add_argument("--eh_min_credit", type=float, default=0.35, help="minimum budget credit for applying watermark at a step")
+    parser.add_argument("--eh_min_credit", type=float, default=0.25, help="minimum budget credit for applying watermark at a step")
+    parser.add_argument("--eh_allow_skip", action='store_true', help="allow budget gating to skip embedding; default is fallback to baseline embedding")
     
     args = parser.parse_args()
     main(args)

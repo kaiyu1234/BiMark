@@ -72,6 +72,7 @@ def main(args):
             eh_sched_key = params.get("eh_sched_key", 137631)
             eh_candidate_width = params.get("eh_candidate_width", 4)
             eh_min_credit = params.get("eh_min_credit", 0.35)
+            eh_allow_skip = params.get("eh_allow_skip", False)
             vocab_size = params["vocab_size"]
             gamma = 0.5
             window_size = params['window_size']
@@ -224,13 +225,13 @@ def main(args):
                                         detect_gen_tokens=generate_tokens, partition_seeds=partition_seeds,  
                                         c_key=c_key, bit_idx_key=bit_idx_key, bits=bits, weight=args.weight, start=start, stride=stride,
                                         eh_enable=eh_enable, eh_state_key=eh_state_key, eh_sched_key=eh_sched_key,
-                                        eh_candidate_width=eh_candidate_width, eh_min_credit=eh_min_credit)
+                                        eh_candidate_width=eh_candidate_width, eh_min_credit=eh_min_credit, eh_allow_skip=eh_allow_skip)
                     
                     COUNTS, detect_generate_counts, detect_green_counts, detect_valid_counts, detect_z_scores, detect_p_values, decode_bits, hit, hit_rate = detector.decode_bimark_multibit_watermark(
                                         inputs=generate_tokens,  partition_seeds=partition_seeds,  c_key=c_key, 
                                         bit_idx_key=bit_idx_key, bits=bits, bits_len=len(bits), weight=args.weight, start=start, stride=stride,
                                         eh_enable=eh_enable, eh_state_key=eh_state_key, eh_sched_key=eh_sched_key,
-                                        eh_candidate_width=eh_candidate_width, eh_min_credit=eh_min_credit)
+                                        eh_candidate_width=eh_candidate_width, eh_min_credit=eh_min_credit, eh_allow_skip=eh_allow_skip)
 
                     # Average bit extraction accuracy (final decoded bits of current sample)
                     final_decode = decode_bits[-1] if len(decode_bits) > 0 else ""

@@ -223,10 +223,15 @@ def eh_should_embed(credit: float, bit_counts: list, bit_idx: int, step_idx: int
     """Deterministic budget gate used by both encoder and detector."""
     if total_steps <= 0:
         total_steps = 1
+    # keep short-text capacity in early generation steps
+    progress = step_idx / total_steps
+    if progress <= 0.6:
+        return True
+
     avg_count = (sum(bit_counts) / max(len(bit_counts), 1)) if bit_counts else 0
     need_boost = bit_counts[bit_idx] + boost_gap < avg_count
-    late_stage = (step_idx / total_steps) > 0.75
-    threshold = min_credit - (0.12 if need_boost else 0.0) - (0.08 if late_stage else 0.0)
-    threshold = max(0.05, threshold)
+    late_stage = progress > 0.85
+    threshold = min_credit - (0.10 if need_boost else 0.0) - (0.06 if late_stage else 0.0)
+    threshold = max(0.15, threshold)
     return credit >= threshold
 

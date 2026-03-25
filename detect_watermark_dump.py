@@ -154,7 +154,7 @@ class WatermarkDetector:
     
     def decode_bimark_multibit_watermark(self, inputs, partition_seeds, c_key,  bit_idx_key, bits, bits_len=0, weight=0,
                                start=0, stride=50, eh_enable=False, eh_state_key=99431, eh_sched_key=137631,
-                               eh_candidate_width=4, eh_min_credit=0.35):
+                               eh_candidate_width=4, eh_min_credit=0.35, eh_allow_skip=False):
         if bits_len == 0:
             bits_len = len(bits)
 
@@ -228,6 +228,10 @@ class WatermarkDetector:
                     total_steps=len(inputs),
                     min_credit=eh_min_credit
                 )
+                if (not should_embed) and (not eh_allow_skip):
+                    rng_bit_idx = np.random.default_rng(rng_idx_seed)
+                    bit_idx = rng_bit_idx.integers(0, bits_len)
+                    should_embed = True
             else:
                 rng_bit_idx = np.random.default_rng(rng_idx_seed)
                 bit_idx = rng_bit_idx.integers(0, bits_len)
@@ -290,7 +294,8 @@ class WatermarkDetector:
 
     def verify_bimark_multibit(self, detect_gen_tokens, partition_seeds,  c_key,  bit_idx_key, 
                                bits, start=0, weight=0, stride=50, eh_enable=False,
-                               eh_state_key=99431, eh_sched_key=137631, eh_candidate_width=4, eh_min_credit=0.35):
+                               eh_state_key=99431, eh_sched_key=137631, eh_candidate_width=4, eh_min_credit=0.35,
+                               eh_allow_skip=False):
         if weight == 0:
             weight = [1 for _ in range(partition_seeds)]
         
@@ -365,6 +370,10 @@ class WatermarkDetector:
                     total_steps=detect_gen_tokens.shape[-1],
                     min_credit=eh_min_credit
                 )
+                if (not should_embed) and (not eh_allow_skip):
+                    rng_bit_idx = np.random.default_rng(rng_idx_seed)
+                    bit_idx = rng_bit_idx.integers(0, len(bits))
+                    should_embed = True
             else:
                 rng_bit_idx = np.random.default_rng(rng_idx_seed)
                 bit_idx = rng_bit_idx.integers(0, len(bits))
