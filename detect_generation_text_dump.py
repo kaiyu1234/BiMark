@@ -67,6 +67,11 @@ def main(args):
             partition_seeds = params["partition_seeds"]
             c_key = params["c_key"]
             bit_idx_key = params["bit_idx_key"]
+            eh_enable = params.get("eh_enable", False)
+            eh_state_key = params.get("eh_state_key", 99431)
+            eh_sched_key = params.get("eh_sched_key", 137631)
+            eh_candidate_width = params.get("eh_candidate_width", 4)
+            eh_min_credit = params.get("eh_min_credit", 0.35)
             vocab_size = params["vocab_size"]
             gamma = 0.5
             window_size = params['window_size']
@@ -211,11 +216,15 @@ def main(args):
                         bits = "0"
                     verify_z_score, verify_z_p_value, verify_green_count,  verify_generate_counts, verify_valid_counts, stride_list, bits_green_count, bits_valid_count, z_score_bits, z_p_value_bits  = detector.verify_bimark_multibit(
                                         detect_gen_tokens=generate_tokens, partition_seeds=partition_seeds,  
-                                        c_key=c_key, bit_idx_key=bit_idx_key, bits=bits, weight=args.weight, start=start, stride=stride)
+                                        c_key=c_key, bit_idx_key=bit_idx_key, bits=bits, weight=args.weight, start=start, stride=stride,
+                                        eh_enable=eh_enable, eh_state_key=eh_state_key, eh_sched_key=eh_sched_key,
+                                        eh_candidate_width=eh_candidate_width, eh_min_credit=eh_min_credit)
                     
                     COUNTS, detect_generate_counts, detect_green_counts, detect_valid_counts, detect_z_scores, detect_p_values, decode_bits, hit, hit_rate = detector.decode_bimark_multibit_watermark(
                                         inputs=generate_tokens,  partition_seeds=partition_seeds,  c_key=c_key, 
-                                        bit_idx_key=bit_idx_key, bits=bits, bits_len=len(bits), weight=args.weight, start=start, stride=stride)
+                                        bit_idx_key=bit_idx_key, bits=bits, bits_len=len(bits), weight=args.weight, start=start, stride=stride,
+                                        eh_enable=eh_enable, eh_state_key=eh_state_key, eh_sched_key=eh_sched_key,
+                                        eh_candidate_width=eh_candidate_width, eh_min_credit=eh_min_credit)
                     
                     result = {'stride_list': stride_list, 'verify_z_score': verify_z_score, 'verify_z_p_value': verify_z_p_value, 'verify_green_count': verify_green_count, 'decode_bits': decode_bits, 'hit': hit, 'hit_rate': hit_rate,
                               'verify_generate_counts': verify_generate_counts, 'verify_valid_counts': verify_valid_counts, 'detect_generate_counts': detect_generate_counts, 'detect_green_counts': detect_green_counts, 

@@ -189,3 +189,44 @@ def prf(seed: torch.LongTensor, secret_key: int):
             result.append(hash_int % 2**32) 
     return result
 
+
+def init_eh_state(prefix: torch.LongTensor, state_key: int, bits_len: int) -> int:
+    """Initialize E+H state-machine state from prefix."""
+    if bits_len <= 0:
+        return 0
+    return prf(prefix, state_key) % bits_len
+
+
+def eh_select_bit(prefix: torch.LongTensor, state: int, bit_counts: list, bits_len: int,
+                  state_key: int, sched_key: int, candidate_width: int = 4):
+    """Deterministic bit selection for E+H (budget + state-machine schedule)."""
+    if bits_len <= 0:
+        return 0, 0, 0.0
+
+    transition_seed = prf(prefix, state_key)
+    # odd multiplier for full cycle tendency
+    a = 2 * (transition_seed % max(bits_len, 1)) + 1
+    b = (transition_seed // 7) % bits_len
+    new_state = (a * state + b) % bits_len
+
+    width = max(1, min(candidate_width, bits_len))
+    candidates = [int((new_state + i) % bits_len) for i in range(width)]
+    selected = min(candidates, key=lambda idx: bit_counts[idx])
+
+    credit_seed = prf(prefix, sched_key)
+    credit = (credit_seed % 10000) / 10000.0
+    return selected, new_state, credit
+
+
+def eh_should_embed(credit: float, bit_counts: list, bit_idx: int, step_idx: int,
+                    total_steps: int, min_credit: float = 0.35, boost_gap: int = 2) -> bool:
+    """Deterministic budget gate used by both encoder and detector."""
+    if total_steps <= 0:
+        total_steps = 1
+    avg_count = (sum(bit_counts) / max(len(bit_counts), 1)) if bit_counts else 0
+    need_boost = bit_counts[bit_idx] + boost_gap < avg_count
+    late_stage = (step_idx / total_steps) > 0.75
+    threshold = min_credit - (0.12 if need_boost else 0.0) - (0.08 if late_stage else 0.0)
+    threshold = max(0.05, threshold)
+    return credit >= threshold
+

@@ -116,7 +116,10 @@ def main(args):
             else:
                 bits = args.message
             watermark_processor_bimark = WatermarkBimark(tokenizer=tokenizer, vocab_size=vocab_size, device=device, top_k=args.top_k, partition_seeds=args.partition_seeds, 
-                                                         c_key=args.c_key, bit_idx_key=args.bit_idx_key, delta=args.prob_delta, window_size=args.window_size, bits=bits)
+                                                         c_key=args.c_key, bit_idx_key=args.bit_idx_key, delta=args.prob_delta, window_size=args.window_size, bits=bits,
+                                                         eh_enable=args.eh_enable, eh_state_key=args.eh_state_key, eh_sched_key=args.eh_sched_key,
+                                                         eh_candidate_width=args.eh_candidate_width, eh_min_credit=args.eh_min_credit,
+                                                         max_new_tokens=args.max_new_tokens)
             generate_args_bimark = {'logits_processor': [watermark_processor_bimark],  'max_new_tokens': args.max_new_tokens,'temperature': args.temperature,  'attention_mask': attention_mask, 
                                   'do_sample': args.do_sample, 'top_k': args.top_k}
         
@@ -168,6 +171,11 @@ def main(args):
                 "c_key": args.c_key,
                 "bit_idx_key": args.bit_idx_key,
                 "partition_seeds": args.partition_seeds,
+                "eh_enable": args.eh_enable,
+                "eh_state_key": args.eh_state_key,
+                "eh_sched_key": args.eh_sched_key,
+                "eh_candidate_width": args.eh_candidate_width,
+                "eh_min_credit": args.eh_min_credit,
                 "time_stamp": time_str,
             }
             record_data(batch_prompts, tokenizer, new_token[:,prompt_tokens_len:].tolist(), idx_list, save_dir, params, bits=bits)
@@ -209,6 +217,11 @@ if __name__ == "__main__":
     parser.add_argument("--top_k", type=int, default=50)
     parser.add_argument("--temperature", type=float, default=1.0)
     parser.add_argument("--do_sample", action='store_true')
+    parser.add_argument("--eh_enable", action='store_true', help="enable E+H (budget optimization + state-machine bit scheduling)")
+    parser.add_argument("--eh_state_key", type=int, default=99431, help="state-machine key for E+H")
+    parser.add_argument("--eh_sched_key", type=int, default=137631, help="budget scheduling key for E+H")
+    parser.add_argument("--eh_candidate_width", type=int, default=4, help="candidate width for state-machine bit selection")
+    parser.add_argument("--eh_min_credit", type=float, default=0.35, help="minimum budget credit for applying watermark at a step")
     
     args = parser.parse_args()
     main(args)

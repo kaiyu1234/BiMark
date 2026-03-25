@@ -2,7 +2,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM, LogitsProcessor
 import torch
 from typing import Dict, List, Union
 import numpy as np
-from utils import prf
+from utils import prf, init_eh_state, eh_select_bit, eh_should_embed
 import pandas as pd
 import random
 import time 
@@ -20,7 +20,13 @@ class WatermarkBimark(LogitsProcessor):
         delta: float = 1.0,
         window_size: int = 2,
         bits: str = '0',
-        alpha: int = 1
+        alpha: int = 1,
+        eh_enable: bool = False,
+        eh_state_key: int = 99431,
+        eh_sched_key: int = 137631,
+        eh_candidate_width: int = 4,
+        eh_min_credit: float = 0.35,
+        max_new_tokens: int = 256
     ):  
         
         self.tokenizer = tokenizer
@@ -46,11 +52,20 @@ class WatermarkBimark(LogitsProcessor):
         self.window_size = window_size
         self.cnt = 0
         self.bits = bits
+        self.eh_enable = eh_enable
+        self.eh_state_key = eh_state_key
+        self.eh_sched_key = eh_sched_key
+        self.eh_candidate_width = eh_candidate_width
+        self.eh_min_credit = eh_min_credit
+        self.max_new_tokens = max_new_tokens
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         begin = time.time()
         if self.cnt == 0:
             self.hist = [set() for _ in range(input_ids.shape[0])]
+            if self.eh_enable:
+                self.eh_states = [0 for _ in range(input_ids.shape[0])]
+                self.bit_counts = [[0 for _ in range(len(self.bits))] for _ in range(input_ids.shape[0])]
 
         if self.cnt < self.window_size:
             self.cnt += 1
@@ -77,6 +92,7 @@ class WatermarkBimark(LogitsProcessor):
         # which depends on the message bit XOR balance bit   
         ops_stack = []
         skip_pos = []  # record the locations of repeated seeds
+        embed_flags = []
        
         for i in range(prefix.size(0)):
             if prefix[i] in self.hist[i]:  # do not use repeated seeds for watermarking
@@ -87,9 +103,35 @@ class WatermarkBimark(LogitsProcessor):
             rng_c = np.random.default_rng(c_seed[i])
             c_list = rng_c.integers(0, 2, size=len(self.partition_masks))
 
-            rng_bit_idx = np.random.default_rng(bit_idx_seed[i])
-            bit_idx = rng_bit_idx.integers(0, len(self.bits))
+            if self.eh_enable:
+                if self.cnt == self.window_size + 1:
+                    self.eh_states[i] = init_eh_state(prefix[i], self.eh_state_key, len(self.bits))
+                bit_idx, next_state, credit = eh_select_bit(
+                    prefix=prefix[i],
+                    state=self.eh_states[i],
+                    bit_counts=self.bit_counts[i],
+                    bits_len=len(self.bits),
+                    state_key=self.eh_state_key,
+                    sched_key=self.eh_sched_key,
+                    candidate_width=self.eh_candidate_width
+                )
+                self.eh_states[i] = next_state
+                should_embed = eh_should_embed(
+                    credit=credit,
+                    bit_counts=self.bit_counts[i],
+                    bit_idx=bit_idx,
+                    step_idx=self.cnt,
+                    total_steps=self.max_new_tokens,
+                    min_credit=self.eh_min_credit
+                )
+            else:
+                rng_bit_idx = np.random.default_rng(bit_idx_seed[i])
+                bit_idx = rng_bit_idx.integers(0, len(self.bits))
+                should_embed = True
             bit = int(self.bits[bit_idx])
+            embed_flags.append(should_embed)
+            if self.eh_enable and should_embed:
+                self.bit_counts[i][bit_idx] += 1
             
             ops_list = []
             for c in c_list:
@@ -101,6 +143,7 @@ class WatermarkBimark(LogitsProcessor):
         
 
         ops_stack = torch.tensor(ops_stack).to(self.device)
+        embed_flags = torch.tensor(embed_flags, dtype=torch.bool, device=self.device)
         
         for i in range(len(self.partition_masks)): 
             top_k_mask = self.partition_masks[i][prob_topk_indices]
@@ -116,6 +159,8 @@ class WatermarkBimark(LogitsProcessor):
 
             delta[skip_pos] = 0
             beta[skip_pos] = 0
+            delta[~embed_flags] = 0
+            beta[~embed_flags] = 0
 
             delta = delta * ops_stack[:,i].unsqueeze(1)
             beta = beta * ops_stack[:,i].unsqueeze(1)

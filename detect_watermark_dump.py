@@ -1,7 +1,7 @@
 import numpy as np
 import random
 from math import sqrt
-from utils import prf
+from utils import prf, init_eh_state, eh_select_bit, eh_should_embed
 from scipy import stats
 import copy
 
@@ -153,7 +153,8 @@ class WatermarkDetector:
     
     
     def decode_bimark_multibit_watermark(self, inputs, partition_seeds, c_key,  bit_idx_key, bits, bits_len=0, weight=0,
-                               start=0, stride=50):
+                               start=0, stride=50, eh_enable=False, eh_state_key=99431, eh_sched_key=137631,
+                               eh_candidate_width=4, eh_min_credit=0.35):
         if bits_len == 0:
             bits_len = len(bits)
 
@@ -175,6 +176,8 @@ class WatermarkDetector:
     
         hist = set() 
         generate_counts = [0 for _ in range(len(stride_idx_list))]
+        eh_states = [0]
+        bit_counts = [[0 for _ in range(bits_len)]]
         idx_s = 0
         for t in range(self.window_size, len(inputs)):
             try:
@@ -187,6 +190,8 @@ class WatermarkDetector:
                     try:
                         COUNTS[idx_s] = copy.deepcopy(COUNTS[idx_s-1])
                         generate_counts[idx_s] = generate_counts[idx_s-1]
+                        eh_states.append(eh_states[idx_s-1])
+                        bit_counts.append(copy.deepcopy(bit_counts[idx_s-1]))
                     except:
                         continue
             prefix = inputs[t - self.window_size: t]
@@ -201,12 +206,36 @@ class WatermarkDetector:
                 continue
             rng_c = np.random.default_rng(c_seed)
             
-            rng_bit_idx = np.random.default_rng(rng_idx_seed)
-
             c_list = rng_c.integers(0, 2, size=len(partition_masks))
-
-
-            bit_idx = rng_bit_idx.integers(0, bits_len)
+            if eh_enable:
+                if t == self.window_size:
+                    eh_states[idx_s] = init_eh_state(prefix, eh_state_key, bits_len)
+                bit_idx, next_state, credit = eh_select_bit(
+                    prefix=prefix,
+                    state=eh_states[idx_s],
+                    bit_counts=bit_counts[idx_s],
+                    bits_len=bits_len,
+                    state_key=eh_state_key,
+                    sched_key=eh_sched_key,
+                    candidate_width=eh_candidate_width
+                )
+                eh_states[idx_s] = next_state
+                should_embed = eh_should_embed(
+                    credit=credit,
+                    bit_counts=bit_counts[idx_s],
+                    bit_idx=bit_idx,
+                    step_idx=t,
+                    total_steps=len(inputs),
+                    min_credit=eh_min_credit
+                )
+            else:
+                rng_bit_idx = np.random.default_rng(rng_idx_seed)
+                bit_idx = rng_bit_idx.integers(0, bits_len)
+                should_embed = True
+            if not should_embed:
+                continue
+            if eh_enable:
+                bit_counts[idx_s][bit_idx] += 1
 
             token_idx = inputs[t].item()
 
@@ -260,7 +289,8 @@ class WatermarkDetector:
     
 
     def verify_bimark_multibit(self, detect_gen_tokens, partition_seeds,  c_key,  bit_idx_key, 
-                               bits, start=0, weight=0, stride=50):
+                               bits, start=0, weight=0, stride=50, eh_enable=False,
+                               eh_state_key=99431, eh_sched_key=137631, eh_candidate_width=4, eh_min_credit=0.35):
         if weight == 0:
             weight = [1 for _ in range(partition_seeds)]
         
@@ -281,6 +311,8 @@ class WatermarkDetector:
         bits_valid_count = [[0 for _ in range(len(bits))] for _ in range(len(stride_idx_list) )]
 
         hist = set()
+        eh_states = [0]
+        bit_counts_track = [[0 for _ in range(len(bits))]]
         idx_s = 0
         for t in range(self.window_size, detect_gen_tokens.shape[-1]):
             try:
@@ -296,6 +328,8 @@ class WatermarkDetector:
                         valid_count[idx_s] = int(valid_count[idx_s-1])
                         bits_green_count[idx_s] = [item for item in bits_green_count[idx_s-1]]
                         bits_valid_count[idx_s] = [item for item in bits_valid_count[idx_s-1]]
+                        eh_states.append(eh_states[idx_s-1])
+                        bit_counts_track.append([item for item in bit_counts_track[idx_s-1]])
                     except:
                         continue
 
@@ -309,11 +343,36 @@ class WatermarkDetector:
             else:
                 continue
             rng_c = np.random.default_rng(c_seed)
-            rng_bit_idx = np.random.default_rng(rng_idx_seed)
-
             c_list = rng_c.integers(0, 2, size=len(partition_masks))
-
-            bit_idx = rng_bit_idx.integers(0, len(bits))
+            if eh_enable:
+                if t == self.window_size:
+                    eh_states[idx_s] = init_eh_state(prefix, eh_state_key, len(bits))
+                bit_idx, next_state, credit = eh_select_bit(
+                    prefix=prefix,
+                    state=eh_states[idx_s],
+                    bit_counts=bit_counts_track[idx_s],
+                    bits_len=len(bits),
+                    state_key=eh_state_key,
+                    sched_key=eh_sched_key,
+                    candidate_width=eh_candidate_width
+                )
+                eh_states[idx_s] = next_state
+                should_embed = eh_should_embed(
+                    credit=credit,
+                    bit_counts=bit_counts_track[idx_s],
+                    bit_idx=bit_idx,
+                    step_idx=t,
+                    total_steps=detect_gen_tokens.shape[-1],
+                    min_credit=eh_min_credit
+                )
+            else:
+                rng_bit_idx = np.random.default_rng(rng_idx_seed)
+                bit_idx = rng_bit_idx.integers(0, len(bits))
+                should_embed = True
+            if not should_embed:
+                continue
+            if eh_enable:
+                bit_counts_track[idx_s][bit_idx] += 1
             bit = int(bits[bit_idx])
 
             token_idx = detect_gen_tokens[t].item()
