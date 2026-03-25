@@ -187,6 +187,12 @@ def main(args):
         if detect:
             # Detect watermark
             detector = WatermarkDetector(tokenizer, vocab_size, window_size=window_size, gamma=gamma)
+            total_bits_strict_hit = 0
+            total_bits = 0
+            total_valid_hit = 0
+            total_valid_bits = 0
+            sample_acc_strict = []
+            sample_acc_valid = []
 
             start, stride = 25, 25
             idx = 0
@@ -225,10 +231,35 @@ def main(args):
                                         bit_idx_key=bit_idx_key, bits=bits, bits_len=len(bits), weight=args.weight, start=start, stride=stride,
                                         eh_enable=eh_enable, eh_state_key=eh_state_key, eh_sched_key=eh_sched_key,
                                         eh_candidate_width=eh_candidate_width, eh_min_credit=eh_min_credit)
+
+                    # Average bit extraction accuracy (final decoded bits of current sample)
+                    final_decode = decode_bits[-1] if len(decode_bits) > 0 else ""
+                    bit_len = len(bits)
+                    strict_hit = 0
+                    valid_hit = 0
+                    valid_cnt = 0
+                    for d_bit, t_bit in zip(final_decode, bits):
+                        if d_bit == t_bit:
+                            strict_hit += 1
+                        if d_bit in ['0', '1']:
+                            valid_cnt += 1
+                            if d_bit == t_bit:
+                                valid_hit += 1
+
+                    strict_acc = strict_hit / bit_len if bit_len > 0 else 0.0
+                    valid_acc = valid_hit / valid_cnt if valid_cnt > 0 else 0.0
+                    sample_acc_strict.append(strict_acc)
+                    sample_acc_valid.append(valid_acc)
+                    total_bits_strict_hit += strict_hit
+                    total_bits += bit_len
+                    total_valid_hit += valid_hit
+                    total_valid_bits += valid_cnt
                     
                     result = {'stride_list': stride_list, 'verify_z_score': verify_z_score, 'verify_z_p_value': verify_z_p_value, 'verify_green_count': verify_green_count, 'decode_bits': decode_bits, 'hit': hit, 'hit_rate': hit_rate,
                               'verify_generate_counts': verify_generate_counts, 'verify_valid_counts': verify_valid_counts, 'detect_generate_counts': detect_generate_counts, 'detect_green_counts': detect_green_counts, 
-                              'detect_valid_counts': detect_valid_counts, 'detect_z_scores': detect_z_scores, 'detect_p_values': detect_p_values, 'COUNTS': COUNTS}
+                              'detect_valid_counts': detect_valid_counts, 'detect_z_scores': detect_z_scores, 'detect_p_values': detect_p_values, 'COUNTS': COUNTS,
+                              'sample_bit_acc_strict': [strict_acc for _ in range(len(stride_list))],
+                              'sample_bit_acc_valid': [valid_acc for _ in range(len(stride_list))]}
                     
                     bits_green_count = list(map(list, zip(*bits_green_count)))
                     bits_valid_count = list(map(list, zip(*bits_valid_count)))
@@ -261,7 +292,8 @@ def main(args):
 
                     columns_result = ['method_name', 'length', 'verify_z_score', 'verify_z_p_value', 'decode_bits', 'hit', 'hit_rate', 'verify_green_count', 
                                     'verify_generate_counts', 'verify_valid_counts', 'detected_gen_text', 
-                                    'COUNTS', 'detect_green_counts', 'detect_valid_counts', 'detect_z_scores', 'detect_p_values']
+                                    'COUNTS', 'detect_green_counts', 'detect_valid_counts', 'detect_z_scores', 'detect_p_values',
+                                    'sample_bit_acc_strict', 'sample_bit_acc_valid']
 
                     columns_result += [f'bits_green_count_{i}' for i in range(len(bits))]
                     columns_result += [f'bits_valid_count_{i}' for i in range(len(bits))]
@@ -276,6 +308,26 @@ def main(args):
                         flg_record = False
                     else:
                         df_result.to_csv(detect_save_path, mode='a', index=False, header=False, columns=columns_result)
+
+            if total_bits > 0:
+                avg_bit_acc_strict = total_bits_strict_hit / total_bits
+                avg_bit_acc_valid = total_valid_hit / total_valid_bits if total_valid_bits > 0 else 0.0
+                macro_bit_acc_strict = float(np.mean(sample_acc_strict)) if len(sample_acc_strict) > 0 else 0.0
+                macro_bit_acc_valid = float(np.mean(sample_acc_valid)) if len(sample_acc_valid) > 0 else 0.0
+                print(f"[Summary] avg_bit_acc_strict={avg_bit_acc_strict:.6f}, avg_bit_acc_valid={avg_bit_acc_valid:.6f}")
+                print(f"[Summary] macro_bit_acc_strict={macro_bit_acc_strict:.6f}, macro_bit_acc_valid={macro_bit_acc_valid:.6f}")
+                summary_path = os.path.join(os.getcwd(), f"{prefix}", f"detect_summary.json")
+                with open(summary_path, 'w', encoding='utf-8') as f:
+                    json.dump({
+                        "avg_bit_acc_strict": avg_bit_acc_strict,
+                        "avg_bit_acc_valid": avg_bit_acc_valid,
+                        "macro_bit_acc_strict": macro_bit_acc_strict,
+                        "macro_bit_acc_valid": macro_bit_acc_valid,
+                        "num_samples": len(sample_acc_strict),
+                        "total_bits": total_bits,
+                        "total_valid_bits": total_valid_bits
+                    }, f, ensure_ascii=False, indent=2)
+                print(f"Saved detect summary to: {summary_path}")
                 
 
 def detect_watermark(key, tokenizer,  detector, detected_gen_text, start=0, stride=0):
