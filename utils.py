@@ -89,8 +89,8 @@ def load_data(dataset_name, prompt_len=100, num_test=10000, ds_start_point=0, sl
             
             # 构建摘要任务的 Prompt
             # text = f"Summarize the following article in 60 to 65 words and retain key information while expressing it concisely:\n{truncated_article}\n\nSummary:"
-            text = f"Summarize the following article concisely (2-3 sentences):\n{truncated_article}\n\nSummary:"
-            # text = truncated_article
+            # text = f"Summarize the following article concisely (2-3 sentences):\n{truncated_article}\n\nSummary:"
+            text = truncated_article
             prompts.append(text)
             prompt_idx.append(t)
             
