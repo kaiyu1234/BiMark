@@ -159,15 +159,31 @@ class WatermarkOmniMark(LogitsProcessor):
             
             if h_t_batch is not None:
                 with torch.no_grad():
-                    # 传入隐状态 (h_t) 和误差 (E_t)，网络内部会自动进行 Padding 适配
+                    # 获取价值网络的原始打分
                     value_logits = self.value_head(h_t_batch.to(torch.bfloat16), E_t_batch.to(torch.bfloat16))
                     
-                    # value_logits shape: (batch_size, vocab_size)
-                    # 将长期价值直接叠加到全体词表的 Logits 上
-                    # alpha (权重) 可以根据需要调节，例如 1.0 或 2.0
-                    alpha = 1.0 
-                    new_scores += alpha * value_logits
-
+                    if self.top_k > 0 and self.top_k < self.vocab_size:
+                        # 1. 找出原 logits 中前 K 个候选词的索引 (batch_size, top_k)
+                        _, top_k_indices = torch.topk(scores, self.top_k, dim=-1)
+                        
+                        # 2. 仅提取这 Top-K 个词对应的 Value 打分
+                        top_k_values = torch.gather(value_logits, 1, top_k_indices)
+                        
+                        # 3. 🚀 核心修复：局部 Z-Score 标准化 (将均值拉到0，方差拉到1)
+                        mean_val = top_k_values.mean(dim=-1, keepdim=True)
+                        std_val = top_k_values.std(dim=-1, keepdim=True) + 1e-8
+                        normalized_values = (top_k_values - mean_val) / std_val
+                        
+                        # 4. 使用 alpha 严格控制 Value Head 的干预强度 (建议 0.5 到 2.0 之间)
+                        # 因为经过标准化，方差为 1，此时的 alpha 就直接等于修改 Logits 的“温度绝对值”
+                        alpha = 1.0 
+                        scaled_values = (alpha * normalized_values).to(new_scores.dtype)
+                        
+                        # 5. 安全地将放缩后的值加回到原来的 Top-K 位置上
+                        new_scores.scatter_add_(1, top_k_indices, scaled_values)
+                    else:
+                        # 如果没有 Top-K，全局相加极易崩溃，保守起见退化为不干预
+                        pass
         return new_scores
 
     def export_and_plot(self, save_name="mean_error"):
